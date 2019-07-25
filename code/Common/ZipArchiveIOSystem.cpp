@@ -40,12 +40,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------
 */
 
+/** @file  ZipArchiveIOSystem.cpp
+ *  @brief Zip File I/O implementation for #Importer
+ */
+
 #include <assimp/ZipArchiveIOSystem.h>
 #include <assimp/BaseImporter.h>
 
 #include <assimp/ai_assert.h>
 
-#include <unordered_map>
+#include <map>
 #include <memory>
 
 #ifdef ASSIMP_USE_HUNTER
@@ -55,7 +59,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 namespace Assimp {
-
     // ----------------------------------------------------------------
     // Wraps an existing Assimp::IOSystem for unzip
     class IOSystem2Unzip {
@@ -226,7 +229,7 @@ namespace Assimp {
 
         ZipFile *zip_file = new ZipFile(m_Size);
 
-        if (unzReadCurrentFile(zip_handle, zip_file->m_Buffer.get(), static_cast<unsigned int>(m_Size)) != m_Size)
+        if (unzReadCurrentFile(zip_handle, zip_file->m_Buffer.get(), static_cast<unsigned int>(m_Size)) != static_cast<int>(m_Size))
         {
             // Failed, release the memory
             delete zip_file;
@@ -247,14 +250,25 @@ namespace Assimp {
     }
 
     size_t ZipFile::Read(void* pvBuffer, size_t pSize, size_t pCount) {
-        const size_t size = pSize * pCount;
-        ai_assert((size + m_SeekPtr) <= m_Size);
+        // Should be impossible
+        ai_assert(m_Buffer != nullptr);
+        ai_assert(NULL != pvBuffer && 0 != pSize && 0 != pCount);
 
-        std::memcpy(pvBuffer, m_Buffer.get() + m_SeekPtr, size);
+        // Clip down to file size
+        size_t byteSize = pSize * pCount;
+        if ((byteSize + m_SeekPtr) > m_Size)
+        {
+            pCount = (m_Size - m_SeekPtr) / pSize;
+            byteSize = pSize * pCount;
+            if (byteSize == 0)
+                return 0;
+        }
 
-        m_SeekPtr += size;
+        std::memcpy(pvBuffer, m_Buffer.get() + m_SeekPtr, byteSize);
 
-        return size;
+        m_SeekPtr += byteSize;
+
+        return pCount;
     }
 
     size_t ZipFile::FileSize() const {
@@ -281,6 +295,7 @@ namespace Assimp {
             m_SeekPtr = m_Size - pOffset;
             return aiReturn_SUCCESS;
         }
+        default:;
         }
 
         return aiReturn_FAILURE;
@@ -311,9 +326,10 @@ namespace Assimp {
         void MapArchive();
 
     private:
+        typedef std::map<std::string, ZipFileInfo> ZipFileInfoMap;
+
         unzFile m_ZipFileHandle = nullptr;
-        typedef std::unordered_map<std::string, ZipFileInfo> ZipFileMap;
-        ZipFileMap m_ArchiveMap;
+        ZipFileInfoMap m_ArchiveMap;
     };
 
     ZipArchiveIOSystem::Implement::Implement(IOSystem* pIOHandler, const char* pFilename, const char* pMode) {
@@ -355,7 +371,7 @@ namespace Assimp {
                 if (fileInfo.uncompressed_size != 0) {
                     std::string filename_string(filename, fileInfo.size_filename);
                     SimplifyFilename(filename_string);
-                    std::pair<ZipFileMap::iterator, bool> result = m_ArchiveMap.insert(std::make_pair(filename_string, ZipFileInfo(m_ZipFileHandle, fileInfo.uncompressed_size)));
+                    m_ArchiveMap.emplace(filename_string, ZipFileInfo(m_ZipFileHandle, fileInfo.uncompressed_size));
                 }
             }
         } while (unzGoToNextFile(m_ZipFileHandle) != UNZ_END_OF_LIST_OF_FILE);
@@ -387,7 +403,7 @@ namespace Assimp {
     bool ZipArchiveIOSystem::Implement::Exists(std::string& filename) {
         MapArchive();
 
-        ZipFileMap::const_iterator it = m_ArchiveMap.find(filename);
+        ZipFileInfoMap::const_iterator it = m_ArchiveMap.find(filename);
         return (it != m_ArchiveMap.end());
     }
 
@@ -397,7 +413,7 @@ namespace Assimp {
         SimplifyFilename(filename);
 
         // Find in the map
-        ZipFileMap::const_iterator zip_it = m_ArchiveMap.find(filename);
+        ZipFileInfoMap::const_iterator zip_it = m_ArchiveMap.find(filename);
         if (zip_it == m_ArchiveMap.cend())
             return nullptr;
 

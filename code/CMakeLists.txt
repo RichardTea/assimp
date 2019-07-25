@@ -690,8 +690,6 @@ ADD_ASSIMP_IMPORTER( Q3BSP
   Q3BSP/Q3BSPFileParser.cpp
   Q3BSP/Q3BSPFileImporter.h
   Q3BSP/Q3BSPFileImporter.cpp
-  Q3BSP/Q3BSPZipArchive.h
-  Q3BSP/Q3BSPZipArchive.cpp
 )
 
 ADD_ASSIMP_IMPORTER( RAW
@@ -810,6 +808,14 @@ ADD_ASSIMP_IMPORTER( MMD
   MMD/MMDPmxParser.h
   MMD/MMDPmxParser.cpp
   MMD/MMDVmdParser.h
+)
+
+ADD_ASSIMP_EXPORTER( Assjson
+  Assjson/cencode.c
+  Assjson/cencode.h
+  Assjson/json_exporter.cpp
+  Assjson/mesh_splitter.cpp
+  Assjson/mesh_splitter.h
 )
 
 # Workaround for issue #2406 - force problematic large file to be optimized to prevent string table overflow error
