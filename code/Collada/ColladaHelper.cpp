@@ -6,7 +6,6 @@ Open Asset Import Library (assimp)
 
 Copyright (c) 2006-2019, assimp team
 
-
 All rights reserved.
 
 Redistribution and use of this software in source and binary forms,
@@ -45,20 +44,62 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ColladaHelper.h"
 
 #include <assimp/commonMetaData.h>
+#include <assimp/ParsingUtils.h>
 
 namespace Assimp {
 namespace Collada {
 
 const MetaKeyPairVector MakeColladaAssimpMetaKeys() {
-	MetaKeyPairVector result;
-	result.emplace_back("authoring_tool", AI_METADATA_SOURCE_GENERATOR);
+    MetaKeyPairVector result;
+    result.emplace_back("authoring_tool", AI_METADATA_SOURCE_GENERATOR);
     result.emplace_back("copyright", AI_METADATA_SOURCE_COPYRIGHT);
-	return result;
+    return result;
 };
 
 const MetaKeyPairVector &GetColladaAssimpMetaKeys() {
-	static const MetaKeyPairVector result = MakeColladaAssimpMetaKeys();
-	return result;
+    static const MetaKeyPairVector result = MakeColladaAssimpMetaKeys();
+    return result;
+}
+
+const MetaKeyPairVector MakeColladaAssimpMetaKeysCamelCase() {
+    MetaKeyPairVector result = MakeColladaAssimpMetaKeys();
+    for (auto &val : result)
+    {
+        ToCamelCase(val.first);
+    }
+    return result;
+};
+
+const MetaKeyPairVector &GetColladaAssimpMetaKeysCamelCase()
+{
+    static const MetaKeyPairVector result = MakeColladaAssimpMetaKeysCamelCase();
+    return result;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Convert underscore_separated to CamelCase: "authoring_tool" becomes "AuthoringTool"
+void ToCamelCase(std::string &text)
+{
+    if (text.empty())
+        return;
+    // Capitalise first character
+    text[0] = Assimp::ToUpper(text[0]);
+    for (auto it = text.begin(); it != text.end(); /*iterated below*/)
+    {
+        if ((*it) == '_')
+        {
+            it = text.erase(it);
+            if (it != text.end())
+                (*it) = ToUpper(*it);
+        }
+        else
+        {
+            // Make next one lower case
+            ++it;
+            if (it != text.end())
+                (*it) = ToLower(*it);
+        }
+    }
 }
 
 } // namespace Collada

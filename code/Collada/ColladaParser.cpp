@@ -250,6 +250,9 @@ void ColladaParser::UriDecodePath(aiString& ss)
 bool ColladaParser::ReadBoolFromTextContent()
 {
     const char* cur = GetTextContent();
+    if ( nullptr == cur) {
+        return false;
+    }
     return (!ASSIMP_strincmp(cur, "true", 4) || '0' != *cur);
 }
 
@@ -258,6 +261,9 @@ bool ColladaParser::ReadBoolFromTextContent()
 ai_real ColladaParser::ReadFloatFromTextContent()
 {
     const char* cur = GetTextContent();
+    if ( nullptr == cur ) {
+        return 0.0;
+    }
     return fast_atof(cur);
 }
 
@@ -278,7 +284,9 @@ void ColladaParser::ReadContents()
                     const char* version = mReader->getAttributeValue(attrib);
 
                     // Store declared format version string
-                    mAssetMetaData.emplace(AI_METADATA_SOURCE_FORMAT_VERSION, version);
+                    aiString v;
+                    v.Set(version);
+                    mAssetMetaData.emplace(AI_METADATA_SOURCE_FORMAT_VERSION, v );
 
                     if (!::strncmp(version, "1.5", 3)) {
                         mFormat = FV_1_5_n;
@@ -403,7 +411,7 @@ void ColladaParser::ReadAssetInfo()
             }
             else
             {
-                ReadMetaDataItem(mAssetMetaData, GetColladaAssimpMetaKeys());
+                ReadMetaDataItem(mAssetMetaData);
             }
         }
         else if (mReader->getNodeType() == irr::io::EXN_ELEMENT_END)
@@ -427,7 +435,7 @@ void ColladaParser::ReadContributorInfo()
     {
         if (mReader->getNodeType() == irr::io::EXN_ELEMENT)
         {
-            ReadMetaDataItem(mAssetMetaData, GetColladaAssimpMetaKeys());
+            ReadMetaDataItem(mAssetMetaData);
         }
         else if (mReader->getNodeType() == irr::io::EXN_ELEMENT_END)
         {
@@ -438,19 +446,21 @@ void ColladaParser::ReadContributorInfo()
     }
 }
 
-bool FindCommonKey(const char *collada_key, const MetaKeyPairVector &key_renaming, size_t &found_index) {
+static bool FindCommonKey(const std::string &collada_key, const MetaKeyPairVector &key_renaming, size_t &found_index) {
     for (size_t i = 0; i < key_renaming.size(); ++i) {
-		if (strcmp(key_renaming[i].first, collada_key) == 0) {
+		if (key_renaming[i].first == collada_key) {
             found_index = i;
             return true;
 		}
 	}
+    found_index = std::numeric_limits<size_t>::max();
     return false;
 }
 
 // ------------------------------------------------------------------------------------------------
 // Reads a single string metadata item
-void ColladaParser::ReadMetaDataItem(StringMetaData &metadata, const MetaKeyPairVector &key_renaming) {
+void ColladaParser::ReadMetaDataItem(StringMetaData &metadata) {
+    const Collada::MetaKeyPairVector &key_renaming = GetColladaAssimpMetaKeysCamelCase();
 	// Metadata such as created, keywords, subject etc
 	const char *key_char = mReader->getNodeName();
 	if (key_char != nullptr) {
@@ -460,12 +470,13 @@ void ColladaParser::ReadMetaDataItem(StringMetaData &metadata, const MetaKeyPair
             aiString aistr;
 			aistr.Set(value_char);
 
+            std::string camel_key_str(key_str);
+			ToCamelCase(camel_key_str);
+
 			size_t found_index;
-			if (FindCommonKey(key_str.c_str(), key_renaming, found_index)) {
+			if (FindCommonKey(camel_key_str, key_renaming, found_index)) {
                 metadata.emplace(key_renaming[found_index].second, aistr);
             } else {
-				std::string camel_key_str(key_str);
-				ToCamelCase(camel_key_str);
 				metadata.emplace(camel_key_str, aistr);
 			}
         }
@@ -473,27 +484,6 @@ void ColladaParser::ReadMetaDataItem(StringMetaData &metadata, const MetaKeyPair
     }
     else
         SkipElement();
-}
-
-// ------------------------------------------------------------------------------------------------
-// Convert underscore_seperated to CamelCase: "authoring_tool" becomes "AuthoringTool"
-void ColladaParser::ToCamelCase(std::string &text)
-{
-    if (text.empty())
-        return;
-    // Capitalise first character
-    text[0] = ToUpper(text[0]);
-    for (auto it = text.begin(); it != text.end(); /*iterated below*/)
-    {
-        if ((*it) == '_')
-        {
-            it = text.erase(it);
-            if (it != text.end())
-                (*it) = ToUpper(*it);
-        }
-        else
-            ++it;
-    }
 }
 
 // ------------------------------------------------------------------------------------------------
