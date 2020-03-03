@@ -39,31 +39,59 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------
 */
-/** @file  AssbinExporter.cpp
- *  ASSBIN exporter main code
- */
 
-#ifndef ASSIMP_BUILD_NO_EXPORT
-#ifndef ASSIMP_BUILD_NO_ASSBIN_EXPORTER
+/// @file material.cpp
+/** Implement common material related functions. */
 
-#include "AssbinFileWriter.h"
+#include <assimp/ai_assert.h>
+#include <assimp/material.h>
 
-#include <assimp/scene.h>
-#include <assimp/IOSystem.hpp>
-#include <assimp/Exporter.hpp>
-
-namespace Assimp {
-
-void ExportSceneAssbin(const char* pFile, IOSystem* pIOSystem, const aiScene* pScene, const ExportProperties* /*pProperties*/) {
-    DumpSceneToAssbin(
-        pFile,
-        "\0", // no command(s).
-        pIOSystem,
-        pScene,
-        false, // shortened?
-        false); // compressed?
+// -------------------------------------------------------------------------------
+const char* TextureTypeToString(aiTextureType in)
+{
+    switch (in)
+    {
+    case aiTextureType_NONE:
+        return "n/a";
+    case aiTextureType_DIFFUSE:
+        return "Diffuse";
+    case aiTextureType_SPECULAR:
+        return "Specular";
+    case aiTextureType_AMBIENT:
+        return "Ambient";
+    case aiTextureType_EMISSIVE:
+        return "Emissive";
+    case aiTextureType_OPACITY:
+        return "Opacity";
+    case aiTextureType_NORMALS:
+        return "Normals";
+    case aiTextureType_HEIGHT:
+        return "Height";
+    case aiTextureType_SHININESS:
+        return "Shininess";
+    case aiTextureType_DISPLACEMENT:
+        return "Displacement";
+    case aiTextureType_LIGHTMAP:
+        return "Lightmap";
+    case aiTextureType_REFLECTION:
+        return "Reflection";
+    case aiTextureType_BASE_COLOR:
+        return "BaseColor";
+    case aiTextureType_NORMAL_CAMERA:
+        return "NormalCamera";
+    case aiTextureType_EMISSION_COLOR:
+        return "EmissionColor";
+    case aiTextureType_METALNESS:
+        return "Metalness";
+    case aiTextureType_DIFFUSE_ROUGHNESS:
+        return "DiffuseRoughness";
+    case aiTextureType_AMBIENT_OCCLUSION:
+        return "AmbientOcclusion";
+    case aiTextureType_UNKNOWN:
+        return "Unknown";
+    default:
+        break;
+    }
+    ai_assert(false);
+    return "BUG";
 }
-} // end of namespace Assimp
-
-#endif // ASSIMP_BUILD_NO_ASSBIN_EXPORTER
-#endif // ASSIMP_BUILD_NO_EXPORT

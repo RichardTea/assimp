@@ -6,15 +6,15 @@ IF ( NOT GLUT_FOUND )
     SET ( GLUT_FOUND 1 )
     SET ( GLUT_INCLUDE_DIR ${Assimp_SOURCE_DIR}/samples/freeglut/ )
     SET ( GLUT_LIBRARIES ${Assimp_SOURCE_DIR}/samples/freeglut/lib/freeglut.lib )
-  ELSE ( MSVC )
+  ELSE ()
     MESSAGE( WARNING "Please install glut." )
-  ENDIF ( MSVC )
-ENDIF ( NOT GLUT_FOUND )
+  ENDIF ()
+ENDIF ()
 
 if ( MSVC )
   ADD_DEFINITIONS( -D_SCL_SECURE_NO_WARNINGS )
   ADD_DEFINITIONS( -D_CRT_SECURE_NO_WARNINGS )
-endif ( MSVC )
+endif ()
 
 INCLUDE_DIRECTORIES(
   ${Assimp_SOURCE_DIR}/include
@@ -35,7 +35,7 @@ ADD_EXECUTABLE( assimp_simpletexturedogl WIN32
 
 SET_PROPERTY(TARGET assimp_simpletexturedogl PROPERTY DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
 
-TARGET_LINK_LIBRARIES( assimp_simpletexturedogl assimp ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} DevIL.lib )
+TARGET_LINK_LIBRARIES( assimp_simpletexturedogl assimp ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} )
 
 SET_TARGET_PROPERTIES( assimp_simpletexturedogl PROPERTIES
   OUTPUT_NAME assimp_simpletexturedogl

@@ -335,6 +335,7 @@ void glTF2Importer::ImportMeshes(glTF2::Asset &r) {
 	std::vector<aiMesh *> meshes;
 
 	unsigned int k = 0;
+    meshOffsets.clear();
 
 	for (unsigned int m = 0; m < r.meshes.Size(); ++m) {
 		Mesh &mesh = r.meshes[m];
@@ -925,6 +926,11 @@ aiNode *ImportNode(aiScene *pScene, glTF2::Asset &r, std::vector<unsigned int> &
 
 	if (node.camera) {
 		pScene->mCameras[node.camera.GetIndex()]->mName = ainode->mName;
+		if (node.translation.isPresent) {
+			aiVector3D trans;
+			CopyValue(node.translation.value, trans);
+			pScene->mCameras[node.camera.GetIndex()]->mPosition = trans;
+		}
 	}
 
 	if (node.light) {
@@ -1248,6 +1254,7 @@ void glTF2Importer::ImportEmbeddedTextures(glTF2::Asset &r) {
 		size_t length = img.GetDataLength();
 		void *data = img.StealData();
 
+		tex->mFilename = img.name;
 		tex->mWidth = static_cast<unsigned int>(length);
 		tex->mHeight = 0;
 		tex->pcData = reinterpret_cast<aiTexel *>(data);
