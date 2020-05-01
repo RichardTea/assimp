@@ -121,6 +121,7 @@ SET( PUBLIC_HEADERS
   ${HEADER_PATH}/GenericProperty.h
   ${HEADER_PATH}/SpatialSort.h
   ${HEADER_PATH}/SkeletonMeshBuilder.h
+  ${HEADER_PATH}/SmallVector.h
   ${HEADER_PATH}/SmoothingGroups.h
   ${HEADER_PATH}/SmoothingGroups.inl
   ${HEADER_PATH}/StandardShapes.h
@@ -185,8 +186,6 @@ SET( Common_SRCS
   Common/ScenePreprocessor.cpp
   Common/ScenePreprocessor.h
   Common/SkeletonMeshBuilder.cpp
-  Common/SplitByBoneCountProcess.cpp
-  Common/SplitByBoneCountProcess.h
   Common/StandardShapes.cpp
   Common/TargetAnimation.cpp
   Common/TargetAnimation.h
@@ -252,35 +251,39 @@ MACRO(ADD_ASSIMP_IMPORTER name)
   ENDIF()
 ENDMACRO()
 
-# if this variable is set to TRUE, the user can manually disable exporters by setting
-# ASSIMP_BUILD_XXX_EXPORTER to FALSE for each exporter
-# if this variable is set to FALSE, the user can manually enable exporters by setting
-# ASSIMP_BUILD_XXX_EXPORTER to TRUE for each exporter
-OPTION(ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT "default value of all ASSIMP_BUILD_XXX_EXPORTER values" TRUE)
+if (NOT ASSIMP_NO_EXPORT)
 
-# macro to add the CMake Option ADD_ASSIMP_IMPORTER_<name> which enables compile of loader
-# this way selective loaders can be compiled (reduces filesize + compile time)
-MACRO(ADD_ASSIMP_EXPORTER name)
-  IF (ASSIMP_NO_EXPORT)
-	set(ASSIMP_EXPORTER_ENABLED FALSE)
-  ELSEIF (ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT)
-    set(ASSIMP_EXPORTER_ENABLED TRUE)
-    IF (DEFINED ASSIMP_BUILD_${name}_EXPORTER AND NOT ASSIMP_BUILD_${name}_EXPORTER)
+  # if this variable is set to TRUE, the user can manually disable exporters by setting
+  # ASSIMP_BUILD_XXX_EXPORTER to FALSE for each exporter
+  # if this variable is set to FALSE, the user can manually enable exporters by setting
+  # ASSIMP_BUILD_XXX_EXPORTER to TRUE for each exporter
+  OPTION(ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT "default value of all ASSIMP_BUILD_XXX_EXPORTER values" TRUE)
+
+  # macro to add the CMake Option ADD_ASSIMP_IMPORTER_<name> which enables compile of loader
+  # this way selective loaders can be compiled (reduces filesize + compile time)
+  MACRO(ADD_ASSIMP_EXPORTER name)
+    IF (ASSIMP_NO_EXPORT)
       set(ASSIMP_EXPORTER_ENABLED FALSE)
+    ELSEIF (ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT)
+      set(ASSIMP_EXPORTER_ENABLED TRUE)
+      IF (DEFINED ASSIMP_BUILD_${name}_EXPORTER AND NOT ASSIMP_BUILD_${name}_EXPORTER)
+        set(ASSIMP_EXPORTER_ENABLED FALSE)
+      ENDIF ()
+    ELSE ()
+      set(ASSIMP_EXPORTER_ENABLED ${ASSIMP_BUILD_${name}_EXPORTER})
     ENDIF ()
-  ELSE ()
-    set(ASSIMP_EXPORTER_ENABLED ${ASSIMP_BUILD_${name}_EXPORTER})
-  ENDIF ()
 
-  IF (ASSIMP_EXPORTER_ENABLED)
-    SET(ASSIMP_EXPORTERS_ENABLED "${ASSIMP_EXPORTERS_ENABLED} ${name}")
-	LIST(APPEND ASSIMP_EXPORTER_SRCS ${ARGN})
-    SOURCE_GROUP(${name}_EXPORTER FILES ${ARGN})
-  ELSE()
-    SET(ASSIMP_EXPORTERS_DISABLED "${ASSIMP_EXPORTERS_DISABLED} ${name}")
-    add_definitions(-DASSIMP_BUILD_NO_${name}_EXPORTER)
-  ENDIF()
-ENDMACRO()
+    IF (ASSIMP_EXPORTER_ENABLED)
+      SET(ASSIMP_EXPORTERS_ENABLED "${ASSIMP_EXPORTERS_ENABLED} ${name}")
+      LIST(APPEND ASSIMP_EXPORTER_SRCS ${ARGN})
+      SOURCE_GROUP(${name}_EXPORTER FILES ${ARGN})
+    ELSE()
+      SET(ASSIMP_EXPORTERS_DISABLED "${ASSIMP_EXPORTERS_DISABLED} ${name}")
+      add_definitions(-DASSIMP_BUILD_NO_${name}_EXPORTER)
+    ENDIF()
+  ENDMACRO()
+
+endif()
 
 SET(ASSIMP_LOADER_SRCS "")
 SET(ASSIMP_IMPORTERS_ENABLED "") # list of enabled importers
@@ -307,11 +310,6 @@ ADD_ASSIMP_IMPORTER( 3DS
   3DS/3DSLoader.h
 )
 
-ADD_ASSIMP_EXPORTER( 3DS
-  3DS/3DSExporter.h
-  3DS/3DSExporter.cpp
-)
-
 ADD_ASSIMP_IMPORTER( AC
   AC/ACLoader.cpp
   AC/ACLoader.h
@@ -327,20 +325,6 @@ ADD_ASSIMP_IMPORTER( ASE
 ADD_ASSIMP_IMPORTER( ASSBIN
   Assbin/AssbinLoader.h
   Assbin/AssbinLoader.cpp
-)
-
-ADD_ASSIMP_EXPORTER( ASSBIN
-  Assbin/AssbinExporter.h
-  Assbin/AssbinExporter.cpp
-  Assbin/AssbinFileWriter.h
-  Assbin/AssbinFileWriter.cpp
-)
-
-ADD_ASSIMP_EXPORTER( ASSXML
-  Assxml/AssxmlExporter.h
-  Assxml/AssxmlExporter.cpp
-  Assxml/AssxmlFileWriter.h
-  Assxml/AssxmlFileWriter.cpp
 )
 
 ADD_ASSIMP_IMPORTER( B3D
@@ -360,11 +344,6 @@ ADD_ASSIMP_IMPORTER( COLLADA
   Collada/ColladaLoader.h
   Collada/ColladaParser.cpp
   Collada/ColladaParser.h
-)
-
-ADD_ASSIMP_EXPORTER( COLLADA
-  Collada/ColladaExporter.h
-  Collada/ColladaExporter.cpp
 )
 
 ADD_ASSIMP_IMPORTER( DXF
@@ -421,11 +400,6 @@ ADD_ASSIMP_IMPORTER( M3D
   M3D/M3DWrapper.h
   M3D/M3DWrapper.cpp
   M3D/m3d.h
-)
-
-ADD_ASSIMP_EXPORTER( M3D
-  M3D/M3DExporter.h
-  M3D/M3DExporter.cpp
 )
 
 ADD_ASSIMP_IMPORTER( MD2
@@ -505,11 +479,6 @@ ADD_ASSIMP_IMPORTER( OBJ
   Obj/ObjTools.h
 )
 
-ADD_ASSIMP_EXPORTER( OBJ
-  Obj/ObjExporter.h
-  Obj/ObjExporter.cpp
-)
-
 ADD_ASSIMP_IMPORTER( OGRE
   Ogre/OgreImporter.h
   Ogre/OgreStructs.h
@@ -529,21 +498,11 @@ ADD_ASSIMP_IMPORTER( OPENGEX
   OpenGEX/OpenGEXStructs.h
 )
 
-ADD_ASSIMP_EXPORTER( OPENGEX
-  OpenGEX/OpenGEXExporter.cpp
-  OpenGEX/OpenGEXExporter.h
-)
-
 ADD_ASSIMP_IMPORTER( PLY
   Ply/PlyLoader.cpp
   Ply/PlyLoader.h
   Ply/PlyParser.cpp
   Ply/PlyParser.h
-)
-
-ADD_ASSIMP_EXPORTER( PLY
-  Ply/PlyExporter.cpp
-  Ply/PlyExporter.h
 )
 
 ADD_ASSIMP_IMPORTER( MS3D
@@ -635,14 +594,86 @@ ADD_ASSIMP_IMPORTER( FBX
   FBX/FBXCommon.h
 )
 
-ADD_ASSIMP_EXPORTER( FBX
-  FBX/FBXExporter.h
-  FBX/FBXExporter.cpp
-  FBX/FBXExportNode.h
-  FBX/FBXExportNode.cpp
-  FBX/FBXExportProperty.h
-  FBX/FBXExportProperty.cpp
-)
+if (NOT ASSIMP_NO_EXPORT)
+
+  ADD_ASSIMP_EXPORTER( OBJ
+    Obj/ObjExporter.h
+    Obj/ObjExporter.cpp)
+
+  ADD_ASSIMP_EXPORTER( OPENGEX
+    OpenGEX/OpenGEXExporter.cpp
+    OpenGEX/OpenGEXExporter.h)
+
+  ADD_ASSIMP_EXPORTER( PLY
+    Ply/PlyExporter.cpp
+    Ply/PlyExporter.h)
+
+  ADD_ASSIMP_EXPORTER( 3DS
+    3DS/3DSExporter.h
+    3DS/3DSExporter.cpp)
+
+  ADD_ASSIMP_EXPORTER( ASSBIN
+    Assbin/AssbinExporter.h
+    Assbin/AssbinExporter.cpp
+    Assbin/AssbinFileWriter.h
+    Assbin/AssbinFileWriter.cpp)
+
+  ADD_ASSIMP_EXPORTER( ASSXML
+    Assxml/AssxmlExporter.h
+    Assxml/AssxmlExporter.cpp
+    Assxml/AssxmlFileWriter.h
+    Assxml/AssxmlFileWriter.cpp)
+
+  ADD_ASSIMP_EXPORTER(M3D
+    M3D/M3DExporter.h
+    M3D/M3DExporter.cpp)
+
+  ADD_ASSIMP_EXPORTER(COLLADA
+    Collada/ColladaExporter.h
+    Collada/ColladaExporter.cpp)
+
+  ADD_ASSIMP_EXPORTER( FBX
+    FBX/FBXExporter.h
+    FBX/FBXExporter.cpp
+    FBX/FBXExportNode.h
+    FBX/FBXExportNode.cpp
+    FBX/FBXExportProperty.h
+    FBX/FBXExportProperty.cpp)
+
+  ADD_ASSIMP_EXPORTER( STL
+    STL/STLExporter.h
+    STL/STLExporter.cpp)
+
+  ADD_ASSIMP_EXPORTER( X
+    X/XFileExporter.h
+    X/XFileExporter.cpp)
+
+  ADD_ASSIMP_EXPORTER( X3D
+    X3D/X3DExporter.cpp
+    X3D/X3DExporter.hpp)
+
+  ADD_ASSIMP_EXPORTER( GLTF
+    glTF/glTFExporter.h
+    glTF/glTFExporter.cpp
+    glTF2/glTF2Exporter.h
+    glTF2/glTF2Exporter.cpp)
+
+  ADD_ASSIMP_EXPORTER( 3MF
+    3MF/D3MFExporter.h
+    3MF/D3MFExporter.cpp)
+
+  ADD_ASSIMP_EXPORTER( ASSJSON
+    Assjson/cencode.c
+    Assjson/cencode.h
+    Assjson/json_exporter.cpp
+    Assjson/mesh_splitter.cpp
+    Assjson/mesh_splitter.h)
+
+  ADD_ASSIMP_EXPORTER( STEP
+    Step/StepExporter.h
+    Step/StepExporter.cpp)
+
+endif()
 
 SET( PostProcessing_SRCS
   PostProcessing/CalcTangentsProcess.cpp
@@ -705,6 +736,8 @@ SET( PostProcessing_SRCS
   PostProcessing/ArmaturePopulate.h
   PostProcessing/GenBoundingBoxesProcess.cpp
   PostProcessing/GenBoundingBoxesProcess.h
+  PostProcessing/SplitByBoneCountProcess.cpp
+  PostProcessing/SplitByBoneCountProcess.h
 )
 SOURCE_GROUP( PostProcessing FILES ${PostProcessing_SRCS})
 
@@ -744,11 +777,6 @@ ADD_ASSIMP_IMPORTER( STL
   STL/STLLoader.h
 )
 
-ADD_ASSIMP_EXPORTER( STL
-  STL/STLExporter.h
-  STL/STLExporter.cpp
-)
-
 ADD_ASSIMP_IMPORTER( TERRAGEN
   Terragen/TerragenLoader.cpp
   Terragen/TerragenLoader.h
@@ -765,11 +793,6 @@ ADD_ASSIMP_IMPORTER( X
   X/XFileImporter.h
   X/XFileParser.cpp
   X/XFileParser.h
-)
-
-ADD_ASSIMP_EXPORTER( X
-  X/XFileExporter.h
-  X/XFileExporter.cpp
 )
 
 ADD_ASSIMP_IMPORTER( X3D
@@ -792,11 +815,6 @@ ADD_ASSIMP_IMPORTER( X3D
   X3D/X3DVocabulary.cpp
 )
 
-ADD_ASSIMP_EXPORTER( X3D
-  X3D/X3DExporter.cpp
-  X3D/X3DExporter.hpp
-)
-
 ADD_ASSIMP_IMPORTER( GLTF
   glTF/glTFCommon.h
   glTF/glTFCommon.cpp
@@ -814,24 +832,12 @@ ADD_ASSIMP_IMPORTER( GLTF
   glTF2/glTF2Importer.h
 )
 
-ADD_ASSIMP_EXPORTER( GLTF
-  glTF/glTFExporter.h
-  glTF/glTFExporter.cpp
-  glTF2/glTF2Exporter.h
-  glTF2/glTF2Exporter.cpp
-)
-
 ADD_ASSIMP_IMPORTER( 3MF
   3MF/D3MFImporter.h
   3MF/D3MFImporter.cpp
   3MF/D3MFOpcPackage.h
   3MF/D3MFOpcPackage.cpp
   3MF/3MFXmlTags.h
-)
-
-ADD_ASSIMP_EXPORTER( 3MF
-  3MF/D3MFExporter.h
-  3MF/D3MFExporter.cpp
 )
 
 ADD_ASSIMP_IMPORTER( MMD
@@ -842,14 +848,6 @@ ADD_ASSIMP_IMPORTER( MMD
   MMD/MMDPmxParser.h
   MMD/MMDPmxParser.cpp
   MMD/MMDVmdParser.h
-)
-
-ADD_ASSIMP_EXPORTER( ASSJSON
-  Assjson/cencode.c
-  Assjson/cencode.h
-  Assjson/json_exporter.cpp
-  Assjson/mesh_splitter.cpp
-  Assjson/mesh_splitter.h
 )
 
 # Workaround for issue #2406 - force problematic large file to be optimized to prevent string table overflow error
@@ -864,20 +862,15 @@ if ((CMAKE_COMPILER_IS_MINGW) AND (CMAKE_BUILD_TYPE MATCHES Debug))
   SET_SOURCE_FILES_PROPERTIES(Importer/StepFile/StepFileGen1.cpp PROPERTIES STATIC_LIBRARY_FLAGS -Os )
 endif()
 
-ADD_ASSIMP_IMPORTER( STEP
-    Step/STEPFile.h
-    Importer/StepFile/StepFileImporter.h
-    Importer/StepFile/StepFileImporter.cpp
-    Importer/StepFile/StepFileGen1.cpp
-    Importer/StepFile/StepFileGen2.cpp
-    Importer/StepFile/StepFileGen3.cpp
-    Importer/StepFile/StepReaderGen.h
-)
-
-ADD_ASSIMP_EXPORTER( STEP
-    Step/StepExporter.h
-    Step/StepExporter.cpp
-)
+#ADD_ASSIMP_IMPORTER( STEP
+#    Step/STEPFile.h
+#    Importer/StepFile/StepFileImporter.h
+#    Importer/StepFile/StepFileImporter.cpp
+#    Importer/StepFile/StepFileGen1.cpp
+#    Importer/StepFile/StepFileGen2.cpp
+#    Importer/StepFile/StepFileGen3.cpp
+#    Importer/StepFile/StepReaderGen.h
+#)
 
 if ((NOT ASSIMP_NO_EXPORT) OR (NOT ASSIMP_EXPORTERS_ENABLED STREQUAL ""))
 	SET( Exporter_SRCS
@@ -894,7 +887,7 @@ SET( Extra_SRCS
 SOURCE_GROUP( Extra FILES ${Extra_SRCS})
 
 # irrXML
-IF(HUNTER_ENABLED)
+IF(ASSIMP_HUNTER_ENABLED)
   hunter_add_package(irrXML)
   find_package(irrXML CONFIG REQUIRED)
 ELSE()
@@ -902,7 +895,7 @@ ELSE()
 ENDIF()
 
 # utf8
-IF(HUNTER_ENABLED)
+IF(ASSIMP_HUNTER_ENABLED)
   hunter_add_package(utf8)
   find_package(utf8 CONFIG REQUIRED)
 ELSE()
@@ -910,7 +903,7 @@ ELSE()
 ENDIF()
 
 # polyclipping
-IF(HUNTER_ENABLED)
+IF(ASSIMP_HUNTER_ENABLED)
   hunter_add_package(polyclipping)
   find_package(polyclipping CONFIG REQUIRED)
 ELSE()
@@ -922,7 +915,7 @@ ELSE()
 ENDIF()
 
 # poly2tri
-IF(HUNTER_ENABLED)
+IF(ASSIMP_HUNTER_ENABLED)
   hunter_add_package(poly2tri)
   find_package(poly2tri CONFIG REQUIRED)
 ELSE()
@@ -943,7 +936,7 @@ ELSE()
 ENDIF()
 
 # minizip/unzip
-IF(HUNTER_ENABLED)
+IF(ASSIMP_HUNTER_ENABLED)
   hunter_add_package(minizip)
   find_package(minizip CONFIG REQUIRED)
 ELSE()
@@ -958,7 +951,7 @@ ELSE()
 ENDIF()
 
 # zip (https://github.com/kuba--/zip)
-IF(HUNTER_ENABLED)
+IF(ASSIMP_HUNTER_ENABLED)
   hunter_add_package(zip)
   find_package(zip CONFIG REQUIRED)
 ELSE()
@@ -979,7 +972,7 @@ ELSE()
 ENDIF()
 
 # openddlparser
-IF(HUNTER_ENABLED)
+IF(ASSIMP_HUNTER_ENABLED)
   hunter_add_package(openddlparser)
   find_package(openddlparser CONFIG REQUIRED)
 ELSE()
@@ -1002,7 +995,7 @@ ELSE()
 ENDIF()
 
 # Open3DGC
-IF(HUNTER_ENABLED)
+IF(ASSIMP_HUNTER_ENABLED)
   # Nothing to do, not available in Hunter yet.
 ELSE()
   SET ( open3dgc_SRCS
@@ -1043,7 +1036,7 @@ ENDIF()
 # RT-extensions is used in "contrib/Open3DGC/o3dgcTimer.h" for collecting statistics. Pointed file
 # has implementation for different platforms: WIN32, __MACH__ and other ("else" block).
 FIND_PACKAGE(RT QUIET)
-IF (NOT HUNTER_ENABLED AND (RT_FOUND OR MSVC))
+IF (NOT ASSIMP_HUNTER_ENABLED AND (RT_FOUND OR MSVC))
   SET( ASSIMP_IMPORTER_GLTF_USE_OPEN3DGC 1 )
   ADD_DEFINITIONS( -DASSIMP_IMPORTER_GLTF_USE_OPEN3DGC=1 )
 ELSE ()
@@ -1053,7 +1046,7 @@ ELSE ()
 ENDIF ()
 
 # RapidJSON
-IF(HUNTER_ENABLED)
+IF(ASSIMP_HUNTER_ENABLED)
   hunter_add_package(RapidJSON)
   find_package(RapidJSON CONFIG REQUIRED)
 ELSE()
@@ -1076,7 +1069,7 @@ if ( MSVC )
   ADD_DEFINITIONS( -D_CRT_SECURE_NO_WARNINGS )
 endif ()
 
-IF(NOT HUNTER_ENABLED)
+IF(NOT ASSIMP_HUNTER_ENABLED)
   if (UNZIP_FOUND)
     SET (unzip_compile_SRCS "")
   else ()
@@ -1088,8 +1081,10 @@ ENDIF()
 MESSAGE(STATUS "Enabled importer formats:${ASSIMP_IMPORTERS_ENABLED}")
 MESSAGE(STATUS "Disabled importer formats:${ASSIMP_IMPORTERS_DISABLED}")
 
-MESSAGE(STATUS "Enabled exporter formats:${ASSIMP_EXPORTERS_ENABLED}")
-MESSAGE(STATUS "Disabled exporter formats:${ASSIMP_EXPORTERS_DISABLED}")
+if (NOT ASSIMP_NO_EXPORT)
+  MESSAGE(STATUS "Enabled exporter formats:${ASSIMP_EXPORTERS_ENABLED}")
+  MESSAGE(STATUS "Disabled exporter formats:${ASSIMP_EXPORTERS_DISABLED}")
+endif()
 
 SOURCE_GROUP( include\\assimp    FILES ${PUBLIC_HEADERS} )
 
@@ -1124,7 +1119,7 @@ SET( assimp_src
 )
 ADD_DEFINITIONS( -DOPENDDLPARSER_BUILD )
 
-IF(NOT HUNTER_ENABLED)
+IF(NOT ASSIMP_HUNTER_ENABLED)
   INCLUDE_DIRECTORIES(
       ${IRRXML_INCLUDE_DIR}
       ../contrib/openddlparser/include
@@ -1139,13 +1134,20 @@ ENDIF ()
 ADD_LIBRARY( assimp ${assimp_src} )
 ADD_LIBRARY(assimp::assimp ALIAS assimp)
 
+# enable warnings as errors ########################################
+IF (MSVC)
+  TARGET_COMPILE_OPTIONS(assimp PRIVATE /WX)
+ELSE()
+  TARGET_COMPILE_OPTIONS(assimp PRIVATE -Werror)
+ENDIF()
+
 TARGET_INCLUDE_DIRECTORIES ( assimp PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>
   $<INSTALL_INTERFACE:include>
 )
 
-IF(HUNTER_ENABLED)
+IF(ASSIMP_HUNTER_ENABLED)
   TARGET_LINK_LIBRARIES(assimp
       PUBLIC
       polyclipping::polyclipping
@@ -1218,7 +1220,7 @@ SET_TARGET_PROPERTIES( assimp PROPERTIES
 )
 
 if (APPLE)
-  if (BUILD_FRAMEWORK)
+  if (ASSIMP_BUILD_FRAMEWORK)
     SET_TARGET_PROPERTIES( assimp PROPERTIES
       FRAMEWORK TRUE
       FRAMEWORK_VERSION C
@@ -1238,7 +1240,7 @@ ENDIF()
 
 # Build against external unzip, or add ../contrib/unzip so
 # assimp can #include "unzip.h"
-IF(NOT HUNTER_ENABLED)
+IF(NOT ASSIMP_HUNTER_ENABLED)
   if (UNZIP_FOUND)
     INCLUDE_DIRECTORIES(${UNZIP_INCLUDE_DIRS})
     TARGET_LINK_LIBRARIES(assimp ${UNZIP_LIBRARIES})
@@ -1252,7 +1254,7 @@ IF (RT_FOUND AND ASSIMP_IMPORTER_GLTF_USE_OPEN3DGC)
   TARGET_LINK_LIBRARIES(assimp ${RT_LIBRARY})
 ENDIF ()
 
-IF(HUNTER_ENABLED)
+IF(ASSIMP_HUNTER_ENABLED)
   INSTALL( TARGETS assimp
     EXPORT "${TARGETS_EXPORT_NAME}"
     LIBRARY DESTINATION ${ASSIMP_LIB_INSTALL_DIR}
