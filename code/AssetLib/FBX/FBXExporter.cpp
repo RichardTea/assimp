@@ -2,7 +2,7 @@
 Open Asset Import Library (assimp)
 ----------------------------------------------------------------------
 
-Copyright (c) 2006-2020, assimp team
+Copyright (c) 2006-2021, assimp team
 
 All rights reserved.
 
@@ -541,10 +541,17 @@ void FBXExporter::WriteReferences ()
 // (before any actual data is written)
 // ---------------------------------------------------------------
 
-size_t count_nodes(const aiNode* n) {
-    size_t count = 1;
+size_t count_nodes(const aiNode* n, const aiNode* root) {
+    size_t count;
+    if (n == root) {
+        count = n->mNumMeshes; // (not counting root node)
+    } else if (n->mNumMeshes > 1) {
+        count = n->mNumMeshes + 1;
+    } else {
+        count = 1;
+    }
     for (size_t i = 0; i < n->mNumChildren; ++i) {
-        count += count_nodes(n->mChildren[i]);
+        count += count_nodes(n->mChildren[i], root);
     }
     return count;
 }
@@ -714,7 +721,7 @@ void FBXExporter::WriteDefinitions ()
 
     // Model / FbxNode
     // <~~ node hierarchy
-    count = int32_t(count_nodes(mScene->mRootNode)) - 1; // (not counting root node)
+    count = int32_t(count_nodes(mScene->mRootNode, mScene->mRootNode));
     if (count) {
         n = FBX::Node("ObjectType", "Model");
         n.AddChild("Count", count);
@@ -812,6 +819,18 @@ void FBXExporter::WriteDefinitions ()
     // Geometry / FbxMesh
     // <~~ aiMesh
     count = mScene->mNumMeshes;
+
+    // Blendshapes are considered Geometry
+    int32_t bsDeformerCount=0;
+    for (size_t mi = 0; mi < mScene->mNumMeshes; ++mi) {
+        aiMesh* m = mScene->mMeshes[mi];
+        if (m->mNumAnimMeshes > 0) {
+          count+=m->mNumAnimMeshes;
+          bsDeformerCount+=m->mNumAnimMeshes; // One deformer per blendshape
+          bsDeformerCount++;                  // Plus one master blendshape deformer
+        }
+    }
+
     if (count) {
         n = FBX::Node("ObjectType", "Geometry");
         n.AddChild("Count", count);
@@ -978,7 +997,7 @@ void FBXExporter::WriteDefinitions ()
     }
 
     // Deformer
-    count = int32_t(count_deformers(mScene));
+    count = int32_t(count_deformers(mScene))+bsDeformerCount;
     if (count) {
         n = FBX::Node("ObjectType", "Deformer");
         n.AddChild("Count", count);
@@ -1363,6 +1382,7 @@ void FBXExporter::WriteObjects ()
         n.End(outstream, binary, indent, true);
     }
 
+
     // aiMaterial
     material_uids.clear();
     for (size_t i = 0; i < mScene->mNumMaterials; ++i) {
@@ -1695,6 +1715,100 @@ void FBXExporter::WriteObjects ()
             );
             tnode.Dump(outstream, binary, indent);
         }
+    }
+
+    // Blendshapes, if any
+    for (size_t mi = 0; mi < mScene->mNumMeshes; ++mi) {
+      const aiMesh* m = mScene->mMeshes[mi];
+      if (m->mNumAnimMeshes == 0) {
+        continue;
+      }
+      // make a deformer for this mesh
+      int64_t deformer_uid = generate_uid();
+      FBX::Node dnode("Deformer");
+      dnode.AddProperties(deformer_uid, m->mName.data + FBX::SEPARATOR + "Blendshapes", "BlendShape");
+      dnode.AddChild("Version", int32_t(101));
+      dnode.Dump(outstream, binary, indent);
+      // connect it
+      connections.emplace_back("C", "OO", deformer_uid, mesh_uids[mi]);
+      std::vector<int32_t> vertex_indices = vVertexIndice[mi];
+
+      for (unsigned int am = 0; am < m->mNumAnimMeshes; ++am) {
+        aiAnimMesh *pAnimMesh = m->mAnimMeshes[am];
+        std::string blendshape_name = pAnimMesh->mName.data;
+
+        // start the node record
+        FBX::Node bsnode("Geometry");
+        int64_t blendshape_uid = generate_uid();
+        mesh_uids.push_back(blendshape_uid);
+        bsnode.AddProperty(blendshape_uid);
+        bsnode.AddProperty(blendshape_name + FBX::SEPARATOR + "Blendshape");
+        bsnode.AddProperty("Shape");
+        bsnode.AddChild("Version", int32_t(100));        
+        bsnode.Begin(outstream, binary, indent);
+        bsnode.DumpProperties(outstream, binary, indent);
+        bsnode.EndProperties(outstream, binary, indent);
+        bsnode.BeginChildren(outstream, binary, indent);
+        indent++;
+        if (pAnimMesh->HasPositions()) {
+          std::vector<int32_t>shape_indices;
+          std::vector<double>pPositionDiff;
+          std::vector<double>pNormalDiff;
+
+          for (unsigned int vt = 0; vt < vertex_indices.size(); ++vt) {
+              aiVector3D pDiff = (pAnimMesh->mVertices[vertex_indices[vt]] - m->mVertices[vertex_indices[vt]]);
+              if(pDiff.Length()>1e-8){
+                shape_indices.push_back(vertex_indices[vt]);
+                pPositionDiff.push_back(pDiff[0]);
+                pPositionDiff.push_back(pDiff[1]);
+                pPositionDiff.push_back(pDiff[2]);
+
+                if (pAnimMesh->HasNormals()) {
+                    aiVector3D nDiff = (pAnimMesh->mNormals[vertex_indices[vt]] - m->mNormals[vertex_indices[vt]]);
+                    pNormalDiff.push_back(nDiff[0]);
+                    pNormalDiff.push_back(nDiff[1]);
+                    pNormalDiff.push_back(nDiff[2]);
+                }
+              }
+          }
+
+          FBX::Node::WritePropertyNode(
+              "Indexes", shape_indices, outstream, binary, indent
+          );
+
+          FBX::Node::WritePropertyNode(
+              "Vertices", pPositionDiff, outstream, binary, indent
+          );
+
+          if (pNormalDiff.size()>0) {
+            FBX::Node::WritePropertyNode(
+                "Normals", pNormalDiff, outstream, binary, indent
+            );
+          }
+        }
+        indent--;
+        bsnode.End(outstream, binary, indent, true);
+
+        // Add blendshape Channel Deformer
+        FBX::Node sdnode("Deformer");
+        const int64_t blendchannel_uid = generate_uid();
+        sdnode.AddProperties(
+            blendchannel_uid, blendshape_name + FBX::SEPARATOR + "SubDeformer", "BlendShapeChannel"
+        );
+        sdnode.AddChild("Version", int32_t(100));
+        sdnode.AddChild("DeformPercent", float_t(0.0));
+        FBX::Node p("Properties70");
+        p.AddP70numberA("DeformPercent", 0.0);
+        sdnode.AddChild(p);
+        // TODO: Normally just one weight per channel, adding stub for later development
+        std::vector<float>fFullWeights;
+        fFullWeights.push_back(100.);
+        sdnode.AddChild("FullWeights", fFullWeights);
+        sdnode.Dump(outstream, binary, indent);
+
+        connections.emplace_back("C", "OO", blendchannel_uid, deformer_uid);
+        connections.emplace_back("C", "OO", blendshape_uid, blendchannel_uid);
+      }
     }
 
     // bones.
@@ -2518,17 +2632,14 @@ void FBXExporter::WriteModelNodes(
                 ],
                 new_node_uid
             );
-            // write model node
-            FBX::Node m("Model");
+
+            aiNode new_node;
             // take name from mesh name, if it exists
-            std::string name = mScene->mMeshes[node->mMeshes[i]]->mName.C_Str();
-            name += FBX::SEPARATOR + "Model";
-            m.AddProperties(new_node_uid, name, "Mesh");
-            m.AddChild("Version", int32_t(232));
-            FBX::Node p("Properties70");
-            p.AddP70enum("InheritType", 1);
-            m.AddChild(p);
-            m.Dump(outstream, binary, 1);
+            new_node.mName = mScene->mMeshes[node->mMeshes[i]]->mName;
+            // write model node
+            WriteModelNode(
+                outstream, binary, &new_node, new_node_uid, "Mesh", std::vector<std::pair<std::string,aiVector3D>>()
+            );
         }
     }
 

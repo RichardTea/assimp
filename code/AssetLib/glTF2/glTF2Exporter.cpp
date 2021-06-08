@@ -2,7 +2,7 @@
 Open Asset Import Library (assimp)
 ----------------------------------------------------------------------
 
-Copyright (c) 2006-2020, assimp team
+Copyright (c) 2006-2021, assimp team
 
 
 All rights reserved.
@@ -96,6 +96,9 @@ glTF2Exporter::glTF2Exporter(const char* filename, IOSystem* pIOSystem, const ai
     mScene = pScene;
 
     mAsset.reset( new Asset( pIOSystem ) );
+
+    // Always on as our triangulation process is aware of this type of encoding
+    mAsset->extensionsUsed.FB_ngon_encoding = true;
 
     if (isBinary) {
         mAsset->SetAsBinary();
@@ -491,7 +494,6 @@ void glTF2Exporter::GetMatTexProp(const aiMaterial* mat, float& prop, const char
 
 void glTF2Exporter::GetMatTex(const aiMaterial* mat, Ref<Texture>& texture, aiTextureType tt, unsigned int slot = 0)
 {
-
     if (mat->GetTextureCount(tt) > 0) {
         aiString tex;
 
@@ -504,6 +506,7 @@ void glTF2Exporter::GetMatTex(const aiMaterial* mat, Ref<Texture>& texture, aiTe
                     texture = mAsset->textures.Get(it->second);
                 }
 
+                bool useBasisUniversal = false;
                 if (!texture) {
                     std::string texId = mAsset->FindUniqueID("", "texture");
                     texture = mAsset->textures.Create(texId);
@@ -516,18 +519,46 @@ void glTF2Exporter::GetMatTex(const aiMaterial* mat, Ref<Texture>& texture, aiTe
                         aiTexture* curTex = mScene->mTextures[atoi(&path[1])];
 
                         texture->source->name = curTex->mFilename.C_Str();
-
-                        // The asset has its own buffer, see Image::SetData
-                        texture->source->SetData(reinterpret_cast<uint8_t *>(curTex->pcData), curTex->mWidth, *mAsset);
-
+                        
+                        //basisu: embedded ktx2, bu
                         if (curTex->achFormatHint[0]) {
                             std::string mimeType = "image/";
-                            mimeType += (memcmp(curTex->achFormatHint, "jpg", 3) == 0) ? "jpeg" : curTex->achFormatHint;
+                            if(memcmp(curTex->achFormatHint, "jpg", 3) == 0)
+                                mimeType += "jpeg";
+                            else if(memcmp(curTex->achFormatHint, "ktx", 3) == 0) {
+                                useBasisUniversal = true;
+                                mimeType += "ktx";
+                            }
+                            else if(memcmp(curTex->achFormatHint, "kx2", 3) == 0) {
+                                useBasisUniversal = true;
+                                mimeType += "ktx2";
+                            }
+                            else if(memcmp(curTex->achFormatHint, "bu", 2) == 0) {
+                                useBasisUniversal = true;
+                                mimeType += "basis";
+                            }
+                            else
+                                mimeType += curTex->achFormatHint;
                             texture->source->mimeType = mimeType;
                         }
+                        
+                        // The asset has its own buffer, see Image::SetData
+                        //basisu: "image/ktx2", "image/basis" as is
+                        texture->source->SetData(reinterpret_cast<uint8_t *>(curTex->pcData), curTex->mWidth, *mAsset);
                     }
                     else {
                         texture->source->uri = path;
+                        if(texture->source->uri.find(".ktx")!=std::string::npos ||
+                           texture->source->uri.find(".basis")!=std::string::npos)
+                        {
+                            useBasisUniversal = true;
+                        }
+                    }
+                    
+                    //basisu
+                    if(useBasisUniversal) {
+                        mAsset->extensionsUsed.KHR_texture_basisu = true;
+                        mAsset->extensionsRequired.KHR_texture_basisu = true;
                     }
 
                     GetTexSampler(mat, texture, tt, slot);
@@ -602,7 +633,7 @@ void glTF2Exporter::ExportMaterials()
     for (unsigned int i = 0; i < mScene->mNumMaterials; ++i) {
         const aiMaterial* mat = mScene->mMaterials[i];
 
-        std::string id = "material_" + to_string(i);
+        std::string id = "material_" + ai_to_string(i);
 
         Ref<Material> m = mAsset->materials.Create(id);
 
@@ -955,6 +986,7 @@ void glTF2Exporter::ExportMeshes()
         m->name = name;
 
         p.material = mAsset->materials.Get(aim->mMaterialIndex);
+        p.ngonEncoded = (aim->mPrimitiveTypes & aiPrimitiveType_NGONEncodingFlag) != 0;
 
 		/******************* Vertices ********************/
 		Ref<Accessor> v = ExportData(*mAsset, meshId, b, aim->mNumVertices, aim->mVertices, AttribType::VEC3, AttribType::VEC3, ComponentType_FLOAT, BufferViewTarget_ARRAY_BUFFER);
@@ -1388,11 +1420,12 @@ void glTF2Exporter::ExportAnimations()
             nameAnim = anim->mName.C_Str();
         }
         Ref<Animation> animRef = mAsset->animations.Create(nameAnim);
+        animRef->name = nameAnim;
 
         for (unsigned int channelIndex = 0; channelIndex < anim->mNumChannels; ++channelIndex) {
             const aiNodeAnim* nodeChannel = anim->mChannels[channelIndex];
 
-            std::string name = nameAnim + "_" + to_string(channelIndex);
+            std::string name = nameAnim + "_" + ai_to_string(channelIndex);
             name = mAsset->FindUniqueID(name, "animation");
 
             Ref<Node> animNode = mAsset->nodes.Get(nodeChannel->mNodeName.C_Str());
