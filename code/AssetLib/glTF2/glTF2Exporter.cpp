@@ -118,14 +118,14 @@ glTF2Exporter::glTF2Exporter(const char* filename, IOSystem* pIOSystem, const ai
     ExportScene();
 
     ExportAnimations();
-    
+
     // export extras
     if(mProperties->HasPropertyCallback("extras"))
     {
         std::function<void*(void*)> ExportExtras = mProperties->GetPropertyCallback("extras");
         mAsset->extras = (rapidjson::Value*)ExportExtras(0);
     }
-    
+
     AssetWriter writer(*mAsset);
 
     if (isBinary) {
@@ -518,11 +518,10 @@ void glTF2Exporter::GetMatTex(const aiMaterial& mat, Ref<Texture>& texture, unsi
                     std::string imgId = mAsset->FindUniqueID("", "image");
                     texture->source = mAsset->images.Create(imgId);
 
-                    if (path[0] == '*') { // embedded
-                        aiTexture* curTex = mScene->mTextures[atoi(&path[1])];
-
+                    const aiTexture* curTex = mScene->GetEmbeddedTexture(path.c_str());
+                    if (curTex != nullptr) { // embedded
                         texture->source->name = curTex->mFilename.C_Str();
-                        
+
                         //basisu: embedded ktx2, bu
                         if (curTex->achFormatHint[0]) {
                             std::string mimeType = "image/";
@@ -544,7 +543,7 @@ void glTF2Exporter::GetMatTex(const aiMaterial& mat, Ref<Texture>& texture, unsi
                                 mimeType += curTex->achFormatHint;
                             texture->source->mimeType = mimeType;
                         }
-                        
+
                         // The asset has its own buffer, see Image::SetData
                         //basisu: "image/ktx2", "image/basis" as is
                         texture->source->SetData(reinterpret_cast<uint8_t *>(curTex->pcData), curTex->mWidth, *mAsset);
@@ -557,7 +556,7 @@ void glTF2Exporter::GetMatTex(const aiMaterial& mat, Ref<Texture>& texture, unsi
                             useBasisUniversal = true;
                         }
                     }
-                    
+
                     //basisu
                     if(useBasisUniversal) {
                         mAsset->extensionsUsed.KHR_texture_basisu = true;
@@ -779,19 +778,17 @@ void glTF2Exporter::ExportMaterials()
         mat.Get(AI_MATKEY_TWOSIDED, m->doubleSided);
         mat.Get(AI_MATKEY_GLTF_ALPHACUTOFF, m->alphaCutoff);
 
+        float opacity;
         aiString alphaMode;
 
+        if (mat.Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS) {
+            if (opacity < 1) {
+                m->alphaMode = "BLEND";
+                m->pbrMetallicRoughness.baseColorFactor[3] *= opacity;
+            }
+        }
         if (mat.Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) == AI_SUCCESS) {
             m->alphaMode = alphaMode.C_Str();
-        } else {
-            float opacity;
-
-            if (mat.Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS) {
-                if (opacity < 1) {
-                    m->alphaMode = "BLEND";
-                    m->pbrMetallicRoughness.baseColorFactor[3] *= opacity;
-                }
-            }
         }
 
         {
@@ -840,8 +837,7 @@ void glTF2Exporter::ExportMaterials()
  * Search through node hierarchy and find the node containing the given meshID.
  * Returns true on success, and false otherwise.
  */
-bool FindMeshNode(Ref<Node>& nodeIn, Ref<Node>& meshNode, std::string meshID)
-{
+bool FindMeshNode(Ref<Node> &nodeIn, Ref<Node> &meshNode, const std::string &meshID) {
     for (unsigned int i = 0; i < nodeIn->meshes.size(); ++i) {
         if (meshID.compare(nodeIn->meshes[i]->id) == 0) {
             meshNode = nodeIn;
